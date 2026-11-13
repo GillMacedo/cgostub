@@ -150,3 +150,16 @@ func TestRunFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownCell(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain":                  "plain",
+		"a|b":                    `a\|b`,
+		"two\nlines\r\n  spaced": "two lines spaced",
+		"<script>":               "&lt;script>",
+	} {
+		if got := mdCell(in); got != want {
+			t.Errorf("mdCell(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -107,7 +107,7 @@ func TestFailOn(t *testing.T) {
 			if failOn != "" {
 				args = append(args, "--fail-on", failOn)
 			}
-			for _, format := range []string{"text", "json"} {
+			for _, format := range []string{"text", "json", "markdown"} {
 				res := run(t, c.dir, nil, append(args, "--format", format, c.pattern)...)
 				if res.code != want {
 					t.Errorf("%s %s --fail-on %q --format %s: exit %d, want %d\n%s%s", c.dir, c.pattern, failOn, format, res.code, want, res.stdout, res.stderr)
@@ -142,6 +142,43 @@ func TestSensord(t *testing.T) {
 		if len(tr.Findings) != 1 || tr.Findings[0].Code != "needs-cgo" || tr.Findings[0].Package != "example.com/sensord/lmsensors" || tr.BuiltWithoutCgo {
 			t.Errorf("%s: %+v", tr.Target, tr)
 		}
+	}
+}
+
+// TestMarkdown checks --format markdown: one table per target with the
+// code, package, import chain and message, and the summary under it.
+func TestMarkdown(t *testing.T) {
+	targets := cross()
+	res := run(t, "../examples/photosvc", nil, "--target", targets, "--format", "markdown", "./...")
+	if res.code != 1 || res.stderr != "" {
+		t.Fatalf("exit %d, stderr %q", res.code, res.stderr)
+	}
+	sections := strings.Split(res.stdout, "### ")
+	if sections[0] != "" || len(sections) != 3 {
+		t.Fatalf("want one section per target:\n%s", res.stdout)
+	}
+	for i, tg := range strings.Split(targets, ",") {
+		sec := sections[i+1]
+		if !strings.HasPrefix(sec, tg+"\n\n| Severity | Code | Package | Imported by | Message |\n| --- | --- | --- | --- | --- |\n") {
+			t.Errorf("%s: section doesn't start with its table:\n%s", tg, sec)
+		}
+		for _, row := range []string{
+			"| ERROR | stub | example.com/photosvc/heic | example.com/photosvc | ",
+			"| WARN | fallback | example.com/photosvc/checksum | example.com/photosvc | ",
+			"| WARN | cgo-dropped | example.com/photosvc/thumbdb | example.com/photosvc | ",
+		} {
+			if !strings.Contains(sec, "\n"+row) {
+				t.Errorf("%s: missing row %q:\n%s", tg, row, sec)
+			}
+		}
+		if !strings.Contains(sec, "|\n\n"+tg+": 1 error and 2 warnings in 4 packages outside the standard library.") {
+			t.Errorf("%s: summary missing under the table:\n%s", tg, sec)
+		}
+	}
+
+	res = run(t, "../examples/healthy", nil, "--target", cross(), "--format", "markdown", ".")
+	if res.code != 0 || strings.Contains(res.stdout, "| Severity |") || !strings.Contains(res.stdout, "nothing outside the standard library changes without cgo (1 package checked)") {
+		t.Errorf("healthy: exit %d\n%s", res.code, res.stdout)
 	}
 }
 

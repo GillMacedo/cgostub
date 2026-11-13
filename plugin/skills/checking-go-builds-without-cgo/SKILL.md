@@ -20,7 +20,7 @@ Build it once, then run it:
     go build -o "${TMPDIR:-/tmp}/cgostub" $(ls "${CLAUDE_PLUGIN_ROOT}"/scripts/*.go | grep -v _test.go)
     "${TMPDIR:-/tmp}/cgostub" --target linux/amd64,darwin/arm64 ./cmd/server
 
-Add `--std` to list the standard library packages that change, `--format json` for machine-readable output, and `--fail-on warn` to fail on warnings too.
+Add `--std` to list the standard library packages that change, `--format json` for machine-readable output, `--format markdown` for a table to paste into a pull request comment, and `--fail-on warn` to fail on warnings too.
 
 ## Read the exit code first
 
