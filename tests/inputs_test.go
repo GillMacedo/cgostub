@@ -12,7 +12,7 @@ import (
 func wantRefused(t *testing.T, name, dir string, env []string, args ...string) {
 	t.Helper()
 	for _, failOn := range []string{"error", "warn", "never"} {
-		for _, format := range []string{"text", "json"} {
+		for _, format := range []string{"text", "json", "markdown"} {
 			a := append([]string{"--fail-on", failOn, "--format", format}, args...)
 			res := run(t, dir, env, a...)
 			if res.code != 2 || res.stdout != "" || !strings.HasPrefix(res.stderr, "cgostub: can't trust the input, nothing was checked: ") {

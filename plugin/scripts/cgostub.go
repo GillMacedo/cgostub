@@ -49,7 +49,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	target := fs.String("target", "", "comma-separated GOOS/GOARCH pairs to check, such as linux/amd64,darwin/arm64 (default: go env GOOS/GOARCH)")
 	tags := fs.String("tags", "", "build tags, as for go build -tags")
-	format := fs.String("format", "text", "output format: text or json")
+	format := fs.String("format", "text", "output format: text, json or markdown")
 	failOn := fs.String("fail-on", "error", "exit 1 on findings at or above this severity: error, warn or never")
 	std := fs.Bool("std", false, "also list standard library packages that change without cgo")
 	dir := fs.String("dir", ".", "directory to run go list and go build in")
@@ -62,8 +62,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	opts := options{tags: *tags, format: *format, failOn: *failOn, std: *std, dir: *dir, patterns: fs.Args()}
-	if opts.format != "text" && opts.format != "json" {
-		fmt.Fprintf(stderr, "cgostub: --format must be text or json, not %q\n", opts.format)
+	if opts.format != "text" && opts.format != "json" && opts.format != "markdown" {
+		fmt.Fprintf(stderr, "cgostub: --format must be text, json or markdown, not %q\n", opts.format)
 		return 2
 	}
 	if opts.failOn != sevError && opts.failOn != sevWarn && opts.failOn != "never" {
@@ -151,6 +151,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			Warnings int             `json:"warnings"`
 			Targets  []*targetReport `json:"targets"`
 		}{version, errs, warns, reports})
+	} else if opts.format == "markdown" {
+		writeMarkdown(stdout, reports, opts.std)
 	} else {
 		writeText(stdout, reports, opts.std)
 	}
@@ -190,35 +192,90 @@ func writeText(w io.Writer, reports []*targetReport, std bool) {
 		}
 	}
 	for _, r := range reports {
-		e, wn := 0, 0
-		for _, f := range r.Findings {
-			if f.Severity == sevError {
-				e++
-			} else if f.Severity == sevWarn {
-				wn++
-			}
-		}
-		var line string
-		if e+wn == 0 {
-			line = fmt.Sprintf("%s: nothing outside the standard library changes without cgo (%s checked).", r.Target, plural(r.NonStandard, "package", "packages"))
-		} else {
-			line = fmt.Sprintf("%s: %s and %s in %s outside the standard library.", r.Target, plural(e, "error", "errors"), plural(wn, "warning", "warnings"), plural(r.NonStandard, "package", "packages"))
-		}
-		fmt.Fprintf(w, "%s go env CGO_ENABLED for %s here is %s.\n", line, r.Target, r.DefaultCgo)
-		if len(r.Standard) > 0 && !std {
-			var names []string
-			for _, f := range r.Standard {
-				names = append(names, f.Package)
-			}
-			fmt.Fprintf(w, "  Standard library packages that also change: %s (--std explains).\n", strings.Join(names, ", "))
-		}
-		switch {
-		case !r.BuiltWithoutCgo:
-			fmt.Fprintf(w, "  The build without cgo wasn't run, because go list already shows a package that can't build. Compile errors in other packages may be hidden.\n")
-		case !r.BuiltWithCgo && r.Target == r.host:
-			fmt.Fprintf(w, "  Built without cgo only: go env CGO_ENABLED is 0 here (no C compiler found, or CGO_ENABLED=0 is set), so a build with cgo wasn't tried.\n")
-		case !r.BuiltWithCgo:
-			fmt.Fprintf(w, "  Built without cgo only: a build with cgo for %s needs a C compiler for that target, so it wasn't tried.\n", r.Target)
+		for _, l := range summary(r, std) {
+			fmt.Fprintln(w, l)
 		}
 	}
+}
+
+// summary returns the summary line for one target and the indented notes
+// under it, as the text output prints them.
+func summary(r *targetReport, std bool) []string {
+	e, wn := 0, 0
+	for _, f := range r.Findings {
+		if f.Severity == sevError {
+			e++
+		} else if f.Severity == sevWarn {
+			wn++
+		}
+	}
+	var line string
+	if e+wn == 0 {
+		line = fmt.Sprintf("%s: nothing outside the standard library changes without cgo (%s checked).", r.Target, plural(r.NonStandard, "package", "packages"))
+	} else {
+		line = fmt.Sprintf("%s: %s and %s in %s outside the standard library.", r.Target, plural(e, "error", "errors"), plural(wn, "warning", "warnings"), plural(r.NonStandard, "package", "packages"))
+	}
+	lines := []string{fmt.Sprintf("%s go env CGO_ENABLED for %s here is %s.", line, r.Target, r.DefaultCgo)}
+	if len(r.Standard) > 0 && !std {
+		var names []string
+		for _, f := range r.Standard {
+			names = append(names, f.Package)
+		}
+		lines = append(lines, fmt.Sprintf("  Standard library packages that also change: %s (--std explains).", strings.Join(names, ", ")))
+	}
+	switch {
+	case !r.BuiltWithoutCgo:
+		lines = append(lines, "  The build without cgo wasn't run, because go list already shows a package that can't build. Compile errors in other packages may be hidden.")
+	case !r.BuiltWithCgo && r.Target == r.host:
+		lines = append(lines, "  Built without cgo only: go env CGO_ENABLED is 0 here (no C compiler found, or CGO_ENABLED=0 is set), so a build with cgo wasn't tried.")
+	case !r.BuiltWithCgo:
+		lines = append(lines, fmt.Sprintf("  Built without cgo only: a build with cgo for %s needs a C compiler for that target, so it wasn't tried.", r.Target))
+	}
+	return lines
+}
+
+// writeMarkdown prints one section per target, for pasting into a pull
+// request comment: a table of the findings with their code, package, import
+// chain and message, and the summary under it.
+func writeMarkdown(w io.Writer, reports []*targetReport, std bool) {
+	for i, r := range reports {
+		if i > 0 {
+			fmt.Fprintln(w)
+		}
+		fmt.Fprintf(w, "### %s\n\n", mdCell(r.Target))
+		shown := r.Findings
+		if std {
+			shown = append(append([]finding{}, r.Findings...), r.Standard...)
+		}
+		if len(shown) > 0 {
+			fmt.Fprintln(w, "| Severity | Code | Package | Imported by | Message |")
+			fmt.Fprintln(w, "| --- | --- | --- | --- | --- |")
+			for _, f := range shown {
+				label := map[string]string{sevError: "ERROR", sevWarn: "WARN", sevNote: "note"}[f.Severity]
+				msg := f.Message
+				if f.Fix != "" {
+					msg += "; fix: " + f.Fix
+				}
+				fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n", label, mdCell(f.Code), mdCell(f.Package), mdCell(strings.Join(f.Via, " -> ")), mdCell(msg))
+			}
+			fmt.Fprintln(w)
+		}
+		for j, l := range summary(r, std) {
+			if j > 0 {
+				fmt.Fprintln(w)
+			}
+			fmt.Fprintln(w, mdText(strings.TrimSpace(l)))
+		}
+	}
+}
+
+// mdCell makes s safe inside a Markdown table cell: a | would end the cell
+// and a line break would end the row.
+func mdCell(s string) string {
+	return mdText(strings.ReplaceAll(strings.Join(strings.Fields(s), " "), "|", `\|`))
+}
+
+// mdText keeps a < in a message from starting an HTML tag.
+func mdText(s string) string {
+	return strings.ReplaceAll(s, "<", "&lt;")
 }
