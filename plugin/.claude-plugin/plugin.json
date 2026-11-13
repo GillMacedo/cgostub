@@ -1,0 +1,13 @@
+{
+  "name": "cgostub",
+  "version": "0.1.0",
+  "description": "Find the Go dependencies that change when a program is built with CGO_ENABLED=0: packages that compile a stub such as go-sqlite3's 'requires cgo to work', switch to a different implementation, drop cgo code and its init functions, or stop building. Compares go list with and without cgo for each target and confirms with a real go build.",
+  "author": {
+    "name": "Giulliano Macedo",
+    "url": "https://github.com/GillMacedo"
+  },
+  "homepage": "https://github.com/GillMacedo/cgostub",
+  "repository": "https://github.com/GillMacedo/cgostub",
+  "license": "MIT",
+  "keywords": ["go", "golang", "cgo", "cgo-enabled", "cross-compile", "docker", "goreleaser", "sqlite", "ci"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "cgostub-marketplace",
+  "description": "Marketplace for cgostub, which finds the Go dependencies that turn into stubs or stop building with CGO_ENABLED=0.",
+  "owner": {
+    "name": "Giulliano Macedo"
+  },
+  "plugins": [
+    {
+      "name": "cgostub",
+      "source": "./plugin",
+      "description": "Find Go dependencies that become stubs, fall back to other code, drop init functions or fail to build when a program is built with CGO_ENABLED=0."
+    }
+  ]
+}
