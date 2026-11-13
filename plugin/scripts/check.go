@@ -594,11 +594,18 @@ func findInits(c *fileCache, dir string, files []string) ([]string, error) {
 // whose behavior without cgo is documented.
 func stdExplain(f *finding, goos string) {
 	unixLike := goos != "windows" && goos != "darwin" && goos != "ios" && goos != "plan9" && goos != "js" && goos != "wasip1"
+	darwinLike := goos == "darwin" || goos == "ios"
 	switch {
 	case f.Package == "net" && unixLike:
 		f.Message = "net can't use the C library's resolver, so name lookups always use the pure Go resolver, which reads /etc/hosts and queries the DNS servers in /etc/resolv.conf. Other NSS sources in /etc/nsswitch.conf, such as LDAP or mDNS, are not used"
+		f.Message += ". Building with -tags netgo makes net use the pure Go resolver in the cgo build too, so both builds resolve names the same way"
+	case f.Package == "net" && darwinLike:
+		f.Message = "darwin always links the cgo resolver, so net keeps it even without cgo; what it leaves out is the file that talks to it, which does not change how names are resolved here"
 	case f.Package == "os/user" && unixLike:
 		f.Message = "os/user uses its pure Go implementation, which reads /etc/passwd and /etc/group only, so users and groups from LDAP, SSSD or other NSS sources are not found"
+		f.Message += ". Building with -tags osusergo makes os/user use the pure Go implementation in the cgo build too, so both builds resolve users the same way"
+	case f.Package == "os/user" && darwinLike:
+		f.Message = "darwin keeps the directory-service lookup in os/user even without cgo, so users and groups still resolve through it"
 	case f.Package == "plugin":
 		f.Severity, f.Code = sevError, "stub"
 		f.Message = "plugin.Open always returns an error without cgo"
