@@ -4,6 +4,9 @@ All notable changes are documented here, in [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Added
+- `--target release` is a shorthand for `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64`, and it can be one entry of a list, so `--target release,linux/386` checks those five plus `linux/386`.
+
 ## [0.1.0] - 2026-11-13
 
 ### Added
