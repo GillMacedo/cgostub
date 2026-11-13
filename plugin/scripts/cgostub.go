@@ -40,6 +40,37 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// releaseTargets is what `--target release` stands for: the pairs a release
+// usually ships, which cross-compiling turns cgo off for.
+var releaseTargets = []string{
+	"linux/amd64",
+	"linux/arm64",
+	"darwin/amd64",
+	"darwin/arm64",
+	"windows/amd64",
+}
+
+// parseTargets splits a --target value into GOOS/GOARCH pairs. `release` is a
+// shorthand for releaseTargets, and it may be one of several values, so
+// `--target release,linux/386` checks the release targets and linux/386.
+func parseTargets(value string, stderr io.Writer) ([]string, bool) {
+	var out []string
+	for _, t := range strings.Split(value, ",") {
+		t = strings.TrimSpace(t)
+		if t == "release" {
+			out = append(out, releaseTargets...)
+			continue
+		}
+		goos, goarch, ok := strings.Cut(t, "/")
+		if !ok || goos == "" || goarch == "" || strings.Contains(goarch, "/") {
+			fmt.Fprintf(stderr, "cgostub: --target wants GOOS/GOARCH pairs such as linux/amd64, not %q\n", t)
+			return nil, false
+		}
+		out = append(out, t)
+	}
+	return out, true
+}
+
 func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("cgostub", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -47,7 +78,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		fs.PrintDefaults()
 	}
-	target := fs.String("target", "", "comma-separated GOOS/GOARCH pairs to check, such as linux/amd64,darwin/arm64 (default: go env GOOS/GOARCH)")
+	target := fs.String("target", "", "comma-separated GOOS/GOARCH pairs to check, such as linux/amd64,darwin/arm64, or release for the usual release set (default: go env GOOS/GOARCH)")
 	tags := fs.String("tags", "", "build tags, as for go build -tags")
 	format := fs.String("format", "text", "output format: text or json")
 	failOn := fs.String("fail-on", "error", "exit 1 on findings at or above this severity: error, warn or never")
@@ -84,15 +115,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *target != "" {
-		for _, t := range strings.Split(*target, ",") {
-			t = strings.TrimSpace(t)
-			goos, goarch, ok := strings.Cut(t, "/")
-			if !ok || goos == "" || goarch == "" || strings.Contains(goarch, "/") {
-				fmt.Fprintf(stderr, "cgostub: --target wants GOOS/GOARCH pairs such as linux/amd64, not %q\n", t)
-				return 2
-			}
-			opts.targets = append(opts.targets, t)
+		targets, ok := parseTargets(*target, stderr)
+		if !ok {
+			return 2
 		}
+		opts.targets = targets
 	} else {
 		host, err := goEnv(opts.dir, "", "", "GOOS", "GOARCH")
 		if err != nil {
