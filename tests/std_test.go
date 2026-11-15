@@ -102,7 +102,27 @@ func main() {
 	if res.code != 0 {
 		t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
 	}
-	for _, f := range readJSON(t, res.stdout).Targets[0].Standard {
+	notes := readJSON(t, res.stdout).Targets[0].Standard
+	// Go 1.22 leaves cgo_unix_cgo_darwin.go out of net without cgo and so has a
+	// net note; Go 1.23 and later compile the same net files both ways. Assert
+	// on the net note only where the toolchain produces one, so this test can
+	// never pass by looking at an empty list. The darwin text itself is
+	// covered by TestStdExplainDarwin, which runs on any toolchain.
+	if goVersionMinor(t) <= 22 {
+		var network *struct{ Severity, Code, Package, Message string }
+		for i := range notes {
+			if notes[i].Package == "net" {
+				network = &notes[i]
+			}
+		}
+		if network == nil {
+			t.Fatalf("Go 1.22 leaves a net file out on darwin, so there must be a net note: %s", res.stdout)
+		}
+		if !strings.Contains(network.Message, "resolver") {
+			t.Errorf("net: darwin note doesn't say what happens to the resolver: %q", network.Message)
+		}
+	}
+	for _, f := range notes {
 		if strings.Contains(f.Message, "/etc/resolv.conf") || strings.Contains(f.Message, "/etc/passwd") {
 			t.Errorf("%s: darwin note uses the Linux explanation: %q", f.Package, f.Message)
 		}
@@ -110,9 +130,6 @@ func main() {
 		// an explanation of what happens to the resolver instead.
 		if strings.Contains(f.Message, "with nothing in its place") {
 			t.Errorf("%s: darwin still gets the generic message: %q", f.Package, f.Message)
-		}
-		if f.Package == "net" && !strings.Contains(f.Message, "resolver") {
-			t.Errorf("net: darwin note doesn't say what happens to the resolver: %q", f.Message)
 		}
 	}
 }
