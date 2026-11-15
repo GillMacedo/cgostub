@@ -78,8 +78,10 @@ With a real dependency, from `scripts/realworld.sh` (this one needs the network 
 The standard library changes too. On Linux, `--std` explains `net` and `os/user`:
 
     note standard-library: net, for linux/amd64
-      net can't use the C library's resolver, so name lookups always use the pure Go resolver, which reads /etc/hosts and queries the DNS servers in /etc/resolv.conf. Other NSS sources in /etc/nsswitch.conf, such as LDAP or mDNS, are not used
+      net can't use the C library's resolver, so name lookups always use the pure Go resolver, which reads /etc/hosts and queries the DNS servers in /etc/resolv.conf. Other NSS sources in /etc/nsswitch.conf, such as LDAP or mDNS, are not used. Building with -tags netgo makes net use the pure Go resolver in the cgo build too, so both builds resolve names the same way
       imported by example.com/healthy -> net/http
+
+On darwin the note says something different, because darwin links the cgo resolver into both builds: there the resolver keeps working, and what changes is only which file is compiled.
 
 Add `--format json` for machine-readable output, with the files compiled only with cgo and only without it for each finding.
 

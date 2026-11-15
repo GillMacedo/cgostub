@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -123,4 +124,26 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// goVersionMinor returns the minor version of the go on PATH ("1.22" -> 22),
+// or -1 when it can't be read. Tests that depend on a standard library's build
+// constraints use it: the set of files a package compiles without cgo changed
+// between Go versions.
+func goVersionMinor(t *testing.T) int {
+	t.Helper()
+	out, err := exec.Command("go", "env", "GOVERSION").Output()
+	if err != nil {
+		return -1
+	}
+	v := strings.TrimPrefix(strings.TrimSpace(string(out)), "go")
+	parts := strings.Split(v, ".")
+	if len(parts) < 2 {
+		return -1
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return -1
+	}
+	return minor
 }
