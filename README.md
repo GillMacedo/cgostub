@@ -85,7 +85,7 @@ On darwin the note says something different, because darwin links the cgo resolv
 
 Add `--format json` for machine-readable output, with the files compiled only with cgo and only without it for each finding.
 
-`--target release` is a shorthand for the pairs a release usually ships, `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64`. It can be one entry of a list, so `--target release,linux/386` checks those five and `linux/386`.
+`--target release` is a shorthand for the pairs a release usually ships, `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64`. It can be one entry of a list, so `--target release,linux/386` checks those five and `linux/386`; a pair named twice is checked once, in first-seen order.
 
 ## How it works
 

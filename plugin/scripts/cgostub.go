@@ -55,18 +55,33 @@ var releaseTargets = []string{
 // `--target release,linux/386` checks the release targets and linux/386.
 func parseTargets(value string, stderr io.Writer) ([]string, bool) {
 	var out []string
+	seen := map[string]bool{}
+	// keep records each pair once, in first-seen order: `release,linux/amd64`
+	// names linux/amd64 twice, and checking it twice would double its findings.
+	keep := func(pair string) {
+		if !seen[pair] {
+			seen[pair] = true
+			out = append(out, pair)
+		}
+	}
 	for _, t := range strings.Split(value, ",") {
 		t = strings.TrimSpace(t)
+		if t == "" {
+			continue // a stray comma; the empty value was already handled by the caller
+		}
 		if t == "release" {
-			out = append(out, releaseTargets...)
+			for _, pair := range releaseTargets {
+				keep(pair)
+			}
 			continue
 		}
 		goos, goarch, ok := strings.Cut(t, "/")
 		if !ok || goos == "" || goarch == "" || strings.Contains(goarch, "/") {
-			fmt.Fprintf(stderr, "cgostub: --target wants GOOS/GOARCH pairs such as linux/amd64, not %q\n", t)
+			fmt.Fprintf(stderr, "cgostub: --target wants GOOS/GOARCH pairs such as linux/amd64, or release for %s, not %q\n",
+				strings.Join(releaseTargets, ","), t)
 			return nil, false
 		}
-		out = append(out, t)
+		keep(t)
 	}
 	return out, true
 }
