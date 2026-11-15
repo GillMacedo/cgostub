@@ -6,6 +6,7 @@ All notable changes are documented here, in [Keep a Changelog](https://keepachan
 
 ### Added
 - The `net` and `os/user` notes say that `-tags netgo` / `-tags osusergo` make the cgo build use the pure Go code too, and darwin gets its own explanation instead of the Linux one: there both builds keep the cgo resolver, so only the compiled files differ.
+- `--target release` is a shorthand for `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64`, and it can be one entry of a list, so `--target release,linux/386` checks those five plus `linux/386`; a pair named twice is checked once, in first-seen order.
 
 ## [0.1.0] - 2026-11-13
 

@@ -187,3 +187,25 @@ func TestRealBinaries(t *testing.T) {
 		t.Errorf("sensord built without cgo, but cgostub says it can't")
 	}
 }
+
+// --target release stands for the release set, and gives the same findings as
+// naming every pair. It also mixes with a pair.
+func TestTargetReleaseShorthand(t *testing.T) {
+	const releaseSet = "linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64"
+	shorthand := run(t, "../examples/photosvc", nil, "--target", "release", "--fail-on", "never", "--format", "json", "./...")
+	explicit := run(t, "../examples/photosvc", nil, "--target", releaseSet, "--fail-on", "never", "--format", "json", "./...")
+	if shorthand.code != explicit.code || shorthand.stdout != explicit.stdout {
+		t.Errorf("--target release differs from the same targets named out:\n--- release\n%s\n--- explicit\n%s", shorthand.stdout, explicit.stdout)
+	}
+	if got := len(readJSON(t, shorthand.stdout).Targets); got != 5 {
+		t.Errorf("release shorthand checked %d targets, want 5:\n%s", got, shorthand.stdout)
+	}
+	mixed := run(t, "../examples/photosvc", nil, "--target", "release,linux/386", "--fail-on", "never", "--format", "json", "./...")
+	targets := []string{}
+	for _, tr := range readJSON(t, mixed.stdout).Targets {
+		targets = append(targets, tr.Target)
+	}
+	if strings.Join(targets, ",") != releaseSet+",linux/386" {
+		t.Errorf("--target release,linux/386 checked %v", targets)
+	}
+}

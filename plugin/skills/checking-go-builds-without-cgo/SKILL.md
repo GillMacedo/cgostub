@@ -10,7 +10,7 @@ cgostub runs `go list -deps` for the same packages with `CGO_ENABLED=1` and `CGO
 ## Find out what to check
 
 1. **The packages:** the main packages that get shipped, such as `./cmd/server`, or `./...` for the whole module. Run it from the module root, or pass `--dir`.
-2. **The targets:** where the binaries are built without cgo. Look for `CGO_ENABLED=0` in the Dockerfile, the Makefile, `.goreleaser.yaml` (`env:` and `goos`/`goarch`), and the CI workflow. Cross-compiling turns cgo off unless `CGO_ENABLED=1` is set, and so does a build where Go finds no C compiler (an Alpine or distroless builder without gcc), so builds for other platforms usually count. Pass them with `--target linux/amd64,darwin/arm64,windows/amd64`. Without `--target`, it checks `go env GOOS/GOARCH`.
+2. **The targets:** where the binaries are built without cgo. Look for `CGO_ENABLED=0` in the Dockerfile, the Makefile, `.goreleaser.yaml` (`env:` and `goos`/`goarch`), and the CI workflow. Cross-compiling turns cgo off unless `CGO_ENABLED=1` is set, and so does a build where Go finds no C compiler (an Alpine or distroless builder without gcc), so builds for other platforms usually count. Pass them with `--target linux/amd64,darwin/arm64,windows/amd64`. Without `--target`, it checks `go env GOOS/GOARCH`. When the release ships the usual set, `--target release` stands for `linux/amd64,linux/arm64,darwin/amd64,darwin/arm64,windows/amd64`, and it can be one entry of a list (`--target release,linux/386`).
 3. **Build tags:** if the real build uses `-tags`, pass the same with `--tags`.
 
 ## Run it

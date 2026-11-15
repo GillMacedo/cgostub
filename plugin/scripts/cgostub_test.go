@@ -192,3 +192,55 @@ func TestStdExplainDarwin(t *testing.T) {
 		t.Errorf("windows net: rewrote the message to %q", f.Message)
 	}
 }
+
+// parseTargets keeps each pair once, in first-seen order, and names the release
+// set in its refusal so a wrong value has somewhere to go.
+func TestParseTargets(t *testing.T) {
+	release := strings.Join(releaseTargets, ",")
+	cases := []struct {
+		in      string
+		want    string
+		refused bool
+	}{
+		{"release", release, false},
+		{"release,release", release, false},
+		{"release,linux/amd64", release, false}, // linux/amd64 is in releaseTargets already
+		{"linux/386,release", "linux/386," + release, false},
+		{" release , linux/386 ", "release targets then linux/386", false},
+		{"release,", release, false}, // a trailing comma is an empty entry, which is ignored
+		{"linux/amd64,linux/amd64", "linux/amd64", false},
+		{"releas", "", true},
+		{"Release", "", true},
+		{"linux", "", true},
+		{"linux/amd64/extra", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			var errb strings.Builder
+			got, ok := parseTargets(c.in, &errb)
+			if c.refused {
+				if ok {
+					t.Fatalf("parseTargets(%q) accepted: %v", c.in, got)
+				}
+				if !strings.Contains(errb.String(), "release for "+release) {
+					t.Fatalf("refusal does not mention the shorthand: %q", errb.String())
+				}
+				return
+			}
+			if !ok {
+				t.Fatalf("parseTargets(%q) refused: %s", c.in, errb.String())
+			}
+			switch c.want {
+			case "release targets then linux/386":
+				if len(got) != len(releaseTargets)+1 || got[len(got)-1] != "linux/386" {
+					t.Fatalf("parseTargets(%q) = %v", c.in, got)
+				}
+			default:
+				if strings.Join(got, ",") != c.want {
+					t.Fatalf("parseTargets(%q) = %v, want %s", c.in, got, c.want)
+				}
+			}
+		})
+	}
+}
