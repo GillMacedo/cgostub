@@ -130,20 +130,44 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 // or -1 when it can't be read. Tests that depend on a standard library's build
 // constraints use it: the set of files a package compiles without cgo changed
 // between Go versions.
+//
+// A release candidate ("go1.24rc1") and a development build ("devel go1.24-...")
+// are read leniently, because the version they are closest to decides how the
+// standard library is built. A caller that gets -1 must skip its version-gated
+// check, not treat it as an old toolchain.
 func goVersionMinor(t *testing.T) int {
 	t.Helper()
 	out, err := exec.Command("go", "env", "GOVERSION").Output()
 	if err != nil {
 		return -1
 	}
-	v := strings.TrimPrefix(strings.TrimSpace(string(out)), "go")
-	parts := strings.Split(v, ".")
-	if len(parts) < 2 {
-		return -1
-	}
-	minor, err := strconv.Atoi(parts[1])
-	if err != nil {
+	minor, ok := parseGoVersionMinor(strings.TrimSpace(string(out)))
+	if !ok {
 		return -1
 	}
 	return minor
+}
+
+// parseGoVersionMinor reads "go1.23.4", "go1.24rc1" and "devel go1.25-abcdef"
+// the same way: the minor number after "go1.".
+func parseGoVersionMinor(v string) (int, bool) {
+	i := strings.Index(v, "go1.")
+	if i < 0 {
+		return 0, false
+	}
+	digits := v[i+len("go1."):]
+	for j, r := range digits {
+		if r < '0' || r > '9' {
+			digits = digits[:j]
+			break
+		}
+	}
+	if digits == "" {
+		return 0, false
+	}
+	minor, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0, false
+	}
+	return minor, true
 }

@@ -152,9 +152,9 @@ func TestRunFlags(t *testing.T) {
 }
 
 // stdExplain is a pure function, so the darwin branch is checked here rather
-// than through a real target: on Go 1.27 darwin/arm64 compiles the same net
-// files with and without cgo, so a run on that toolchain produces no note at
-// all and the integration test would pass without exercising anything.
+// than through a real target: from Go 1.23 on, darwin/arm64 compiles the same
+// net files with and without cgo, so a run on such a toolchain produces no note
+// at all and the integration test would pass without exercising anything.
 func TestStdExplainDarwin(t *testing.T) {
 	for _, goos := range []string{"darwin", "ios"} {
 		for _, pkg := range []string{"net", "os/user"} {
@@ -166,10 +166,38 @@ func TestStdExplainDarwin(t *testing.T) {
 			if strings.Contains(f.Message, "with nothing in its place") {
 				t.Errorf("%s %s: kept the generic message: %q", goos, pkg, f.Message)
 			}
-			if !strings.Contains(f.Message, "darwin") {
+			// The note names the target it is about; ios satisfies the darwin
+			// build tag but is a different GOOS in the report.
+			if !strings.Contains(f.Message, goos) {
 				t.Errorf("%s %s: doesn't say what %s does: %q", goos, pkg, goos, f.Message)
 			}
 		}
+	}
+
+	// The darwin net note names the files that changed, in each of the three
+	// shapes a file diff can have.
+	shapes := []struct {
+		name     string
+		removed  []string
+		added    []string
+		contains string
+	}{
+		{"only files left out", []string{"cgo_unix_cgo_darwin.go"}, nil, "it leaves out cgo_unix_cgo_darwin.go"},
+		{"a replacement", []string{"a_cgo.go"}, []string{"a_purego.go"}, "it compiles a_purego.go in place of a_cgo.go"},
+		{"only files added", nil, []string{"b_purego.go"}, "it compiles b_purego.go as well"},
+	}
+	for _, s := range shapes {
+		f := finding{Package: "net", Removed: s.removed, Added: s.added}
+		stdExplain(&f, "darwin")
+		if !strings.Contains(f.Message, s.contains) {
+			t.Errorf("%s: %q does not contain %q", s.name, f.Message, s.contains)
+		}
+	}
+	// With no file diff at all the sentence still has to read as a sentence.
+	f := finding{Package: "net"}
+	stdExplain(&f, "darwin")
+	if strings.Contains(f.Message, ", ,") || strings.Contains(f.Message, "it leaves out ,") {
+		t.Errorf("no file diff: %q", f.Message)
 	}
 
 	// The Linux branches are unchanged, and the netgo/osusergo sentence reaches
@@ -186,9 +214,9 @@ func TestStdExplainDarwin(t *testing.T) {
 	}
 
 	// A target with no explanation keeps the generic message.
-	f := finding{Package: "net", Message: "generic"}
-	stdExplain(&f, "windows")
-	if f.Message != "generic" {
-		t.Errorf("windows net: rewrote the message to %q", f.Message)
+	plain := finding{Package: "net", Message: "generic"}
+	stdExplain(&plain, "windows")
+	if plain.Message != "generic" {
+		t.Errorf("windows net: rewrote the message to %q", plain.Message)
 	}
 }

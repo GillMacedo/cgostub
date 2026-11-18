@@ -595,17 +595,31 @@ func findInits(c *fileCache, dir string, files []string) ([]string, error) {
 func stdExplain(f *finding, goos string) {
 	unixLike := goos != "windows" && goos != "darwin" && goos != "ios" && goos != "plan9" && goos != "js" && goos != "wasip1"
 	darwinLike := goos == "darwin" || goos == "ios"
+	// On darwin the note has to say which file changed, since that is all that
+	// changes: build the clause from the files the two builds compile so it is
+	// right whichever way the file diff came out.
+	var darwinFiles string
+	if len(f.Removed) > 0 && len(f.Added) > 0 {
+		darwinFiles = "it compiles " + fileList(f.Added) + " in place of " + fileList(f.Removed) + ", which"
+	} else if len(f.Removed) > 0 {
+		darwinFiles = "it leaves out " + fileList(f.Removed) + ", which"
+	} else if len(f.Added) > 0 {
+		darwinFiles = "it compiles " + fileList(f.Added) + " as well, which"
+	}
 	switch {
 	case f.Package == "net" && unixLike:
-		f.Message = "net can't use the C library's resolver, so name lookups always use the pure Go resolver, which reads /etc/hosts and queries the DNS servers in /etc/resolv.conf. Other NSS sources in /etc/nsswitch.conf, such as LDAP or mDNS, are not used"
-		f.Message += ". Building with -tags netgo makes net use the pure Go resolver in the cgo build too, so both builds resolve names the same way"
+		f.Message = "net can't use the C library's resolver, so name lookups always use the pure Go resolver, which reads /etc/hosts and queries the DNS servers in /etc/resolv.conf. Other NSS sources in /etc/nsswitch.conf, such as LDAP or mDNS, are not used. Building with -tags netgo makes net use the pure Go resolver in the cgo build too, so both builds resolve names the same way"
 	case f.Package == "net" && darwinLike:
-		f.Message = "darwin always links the cgo resolver, so net keeps it even without cgo; what it leaves out is the file that talks to it, which does not change how names are resolved here"
+		f.Message = goos + " always links the cgo resolver, so net keeps it even without cgo"
+		if darwinFiles != "" {
+			f.Message += "; " + darwinFiles + " does not change how names are resolved here"
+		} else {
+			f.Message += ", and what changes here does not change how names are resolved"
+		}
 	case f.Package == "os/user" && unixLike:
-		f.Message = "os/user uses its pure Go implementation, which reads /etc/passwd and /etc/group only, so users and groups from LDAP, SSSD or other NSS sources are not found"
-		f.Message += ". Building with -tags osusergo makes os/user use the pure Go implementation in the cgo build too, so both builds resolve users the same way"
+		f.Message = "os/user uses its pure Go implementation, which reads /etc/passwd and /etc/group only, so users and groups from LDAP, SSSD or other NSS sources are not found. Building with -tags osusergo makes os/user use the pure Go implementation in the cgo build too, so both builds resolve users the same way"
 	case f.Package == "os/user" && darwinLike:
-		f.Message = "darwin keeps the directory-service lookup in os/user even without cgo, so users and groups still resolve through it"
+		f.Message = goos + " keeps the directory-service lookup in os/user even without cgo, so users and groups still resolve through it"
 	case f.Package == "plugin":
 		f.Severity, f.Code = sevError, "stub"
 		f.Message = "plugin.Open always returns an error without cgo"
