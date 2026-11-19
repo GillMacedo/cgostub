@@ -4,6 +4,9 @@ All notable changes are documented here, in [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Added
+- The `net` and `os/user` notes say that `-tags netgo` / `-tags osusergo` make the cgo build use the pure Go code too, and darwin gets its own explanation instead of the Linux one: there both builds keep the cgo resolver, so only the compiled files differ.
+
 ## [0.1.0] - 2026-11-13
 
 ### Added

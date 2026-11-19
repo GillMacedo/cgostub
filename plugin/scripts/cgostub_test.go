@@ -151,6 +151,48 @@ func TestRunFlags(t *testing.T) {
 	}
 }
 
+// stdExplain is a pure function, so the darwin branch is checked here rather
+// than through a real target: on Go 1.27 darwin/arm64 compiles the same net
+// files with and without cgo, so a run on that toolchain produces no note at
+// all and the integration test would pass without exercising anything.
+func TestStdExplainDarwin(t *testing.T) {
+	for _, goos := range []string{"darwin", "ios"} {
+		for _, pkg := range []string{"net", "os/user"} {
+			f := finding{Package: pkg}
+			stdExplain(&f, goos)
+			if strings.Contains(f.Message, "/etc/resolv.conf") || strings.Contains(f.Message, "/etc/passwd") {
+				t.Errorf("%s %s: uses the Linux explanation: %q", goos, pkg, f.Message)
+			}
+			if strings.Contains(f.Message, "with nothing in its place") {
+				t.Errorf("%s %s: kept the generic message: %q", goos, pkg, f.Message)
+			}
+			if !strings.Contains(f.Message, "darwin") {
+				t.Errorf("%s %s: doesn't say what %s does: %q", goos, pkg, goos, f.Message)
+			}
+		}
+	}
+
+	// The Linux branches are unchanged, and the netgo/osusergo sentence reaches
+	// both of them.
+	for _, pkg := range []string{"net", "os/user"} {
+		f := finding{Package: pkg}
+		stdExplain(&f, "linux")
+		if strings.Contains(f.Message, "darwin") {
+			t.Errorf("linux %s: mentions darwin: %q", pkg, f.Message)
+		}
+		if !strings.Contains(f.Message, "both builds") {
+			t.Errorf("linux %s: does not mention the build tags: %q", pkg, f.Message)
+		}
+	}
+
+	// A target with no explanation keeps the generic message.
+	f := finding{Package: "net", Message: "generic"}
+	stdExplain(&f, "windows")
+	if f.Message != "generic" {
+		t.Errorf("windows net: rewrote the message to %q", f.Message)
+	}
+}
+
 func TestMarkdownCell(t *testing.T) {
 	for in, want := range map[string]string{
 		"plain":                  "plain",
