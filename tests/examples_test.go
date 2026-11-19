@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -107,7 +108,7 @@ func TestFailOn(t *testing.T) {
 			if failOn != "" {
 				args = append(args, "--fail-on", failOn)
 			}
-			for _, format := range []string{"text", "json"} {
+			for _, format := range []string{"text", "json", "markdown"} {
 				res := run(t, c.dir, nil, append(args, "--format", format, c.pattern)...)
 				if res.code != want {
 					t.Errorf("%s %s --fail-on %q --format %s: exit %d, want %d\n%s%s", c.dir, c.pattern, failOn, format, res.code, want, res.stdout, res.stderr)
@@ -142,6 +143,66 @@ func TestSensord(t *testing.T) {
 		if len(tr.Findings) != 1 || tr.Findings[0].Code != "needs-cgo" || tr.Findings[0].Package != "example.com/sensord/lmsensors" || tr.BuiltWithoutCgo {
 			t.Errorf("%s: %+v", tr.Target, tr)
 		}
+	}
+}
+
+// TestMarkdown checks --format markdown: one table per target with the
+// code, package, import chain and message, and the summary under it.
+func TestMarkdown(t *testing.T) {
+	targets := cross()
+	res := run(t, "../examples/photosvc", nil, "--target", targets, "--format", "markdown", "./...")
+	if res.code != 1 || res.stderr != "" {
+		t.Fatalf("exit %d, stderr %q", res.code, res.stderr)
+	}
+	// A section starts at the start of a line, so a "### " inside a message
+	// doesn't split one.
+	sections := strings.Split("\n"+res.stdout, "\n### ")
+	if sections[0] != "" || len(sections) != 3 {
+		t.Fatalf("want one section per target:\n%s", res.stdout)
+	}
+	for i, tg := range strings.Split(targets, ",") {
+		sec := sections[i+1]
+		if !strings.HasPrefix(sec, tg+"\n\n| Severity | Code | Package | Imported by | Message |\n| --- | --- | --- | --- | --- |\n") {
+			t.Errorf("%s: section doesn't start with its table:\n%s", tg, sec)
+		}
+		for _, row := range []string{
+			"| ERROR | stub | `example.com/photosvc/heic` | `example.com/photosvc` | ",
+			"| WARN | fallback | `example.com/photosvc/checksum` | `example.com/photosvc` | ",
+			"| WARN | cgo-dropped | `example.com/photosvc/thumbdb` | `example.com/photosvc` | ",
+		} {
+			if !strings.Contains(sec, "\n"+row) {
+				t.Errorf("%s: missing row %q:\n%s", tg, row, sec)
+			}
+		}
+		if !strings.Contains(sec, "|\n\n"+tg+": 1 error and 2 warnings in 4 packages outside the standard library.") {
+			t.Errorf("%s: summary missing under the table:\n%s", tg, sec)
+		}
+	}
+
+	res = run(t, "../examples/healthy", nil, "--target", cross(), "--format", "markdown", ".")
+	if res.code != 0 || strings.Contains(res.stdout, "| Severity |") || !strings.Contains(res.stdout, "nothing outside the standard library changes without cgo (1 package checked)") {
+		t.Errorf("healthy: exit %d\n%s", res.code, res.stdout)
+	}
+}
+
+// TestMarkdownInert checks that text from the checked module can't add
+// Markdown to the comment: a stub string with emphasis, a mention, an issue
+// reference, a link, backticks, an entity, a | and a "### " comes out as one
+// code span in its table row.
+func TestMarkdownInert(t *testing.T) {
+	dir := copyDir(t, "../examples/photosvc")
+	evil := "heic: *C.char* needs cgo, ask @octocat #42 [docs](https://evil.example) `x` &lt; a|b ``y``` ### z, built with CGO_ENABLED=0"
+	writeFiles(t, dir, map[string]string{"heic/decode_nocgo.go": "//go:build !cgo\n\npackage heic\n\nimport \"errors\"\n\nvar errNoCgo = errors.New(" + strconv.Quote(evil) + ")\n\nfunc decode(data []byte) (Image, error) {\n\treturn Image{}, errNoCgo\n}\n"})
+	res := run(t, dir, nil, "--target", "linux/amd64", "--format", "markdown", "./...")
+	if res.code != 1 || res.stderr != "" {
+		t.Fatalf("exit %d, stderr %q\n%s", res.code, res.stderr, res.stdout)
+	}
+	want := "\n| ERROR | stub | `example.com/photosvc/heic` | `example.com/photosvc` | " +
+		"````without cgo it compiles decode_nocgo.go in place of 1 file that uses cgo (decode_cgo.go). That looks like a stub: decode_nocgo.go:7 has " +
+		`"heic: *C.char* needs cgo, ask @octocat #42 [docs](https://evil.example) ` + "`x`" + ` &lt; a\|b ` + "``y```" + ` ### z, built with CGO_ENABLED=0"` +
+		"; fix: build linux/amd64 with CGO_ENABLED=1 and a C compiler for it, or use a package that doesn't need cgo```` |\n"
+	if !strings.Contains(res.stdout, want) {
+		t.Errorf("stub row isn't one inert code span, want\n%s\ngot\n%s", want, res.stdout)
 	}
 }
 
