@@ -205,3 +205,19 @@ func TestMarkdownCell(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownCode(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                       "",
+		"example.com/a":          "`example.com/a`",
+		"a|b":                    "`a\\|b`",
+		"two\nlines\r\n  spaced": "`two lines spaced`",
+		"*C.char* @octocat #42 [docs](https://evil.example) &lt; <b>": "`*C.char* @octocat #42 [docs](https://evil.example) &lt; <b>`",
+		"run `x` and ``y``": "``` run `x` and ``y`` ```",
+		"`edge`":            "`` `edge` ``",
+	} {
+		if got := mdCode(in); got != want {
+			t.Errorf("mdCode(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -256,7 +256,7 @@ func writeMarkdown(w io.Writer, reports []*targetReport, std bool) {
 				if f.Fix != "" {
 					msg += "; fix: " + f.Fix
 				}
-				fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n", label, mdCell(f.Code), mdCell(f.Package), mdCell(strings.Join(f.Via, " -> ")), mdCell(msg))
+				fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n", label, mdCell(f.Code), mdCode(f.Package), mdCode(strings.Join(f.Via, " -> ")), mdCode(msg))
 			}
 			fmt.Fprintln(w)
 		}
@@ -273,6 +273,37 @@ func writeMarkdown(w io.Writer, reports []*targetReport, std bool) {
 // and a line break would end the row.
 func mdCell(s string) string {
 	return mdText(strings.ReplaceAll(strings.Join(strings.Fields(s), " "), "|", `\|`))
+}
+
+// mdCode puts text that comes from the checked module, such as a stub's
+// string literal or a package path, in a code span, so that none of it is
+// read as Markdown: no links, emphasis, HTML, entities, @mentions or #123
+// references. The fence is one backtick longer than the longest run of
+// backticks in s, a | is escaped so it doesn't end the table cell (GitHub
+// unescapes it inside code spans too), and line breaks are collapsed so they
+// don't end the row.
+func mdCode(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	longest, run := 0, 0
+	for _, c := range s {
+		if c == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", longest+1)
+	s = strings.ReplaceAll(s, "|", `\|`)
+	if strings.HasPrefix(s, "`") || strings.HasSuffix(s, "`") {
+		// A space on both sides is stripped again, and keeps a backtick at
+		// the edge from joining the fence.
+		s = " " + s + " "
+	}
+	return fence + s + fence
 }
 
 // mdText keeps a < in a message from starting an HTML tag.
