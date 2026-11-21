@@ -81,7 +81,12 @@ The standard library changes too. On Linux, `--std` explains `net` and `os/user`
       net can't use the C library's resolver, so name lookups always use the pure Go resolver, which reads /etc/hosts and queries the DNS servers in /etc/resolv.conf. Other NSS sources in /etc/nsswitch.conf, such as LDAP or mDNS, are not used. Building with -tags netgo makes net use the pure Go resolver in the cgo build too, so both builds resolve names the same way
       imported by example.com/healthy -> net/http
 
-On darwin the note says something different, because darwin links the cgo resolver into both builds: there the resolver keeps working, and what changes is only which file is compiled.
+On darwin the note says something different, because darwin links the cgo resolver into both builds: there the resolver keeps working, and what changes is only which file is compiled, which the note names:
+
+    note standard-library: net, for darwin/arm64
+      darwin always links the cgo resolver, so net keeps it even without cgo; it leaves out cgo_unix_cgo_darwin.go, which does not change how names are resolved here
+
+That file exists up to Go 1.22. Go 1.23 removed it, so on 1.23 and later darwin compiles the same `net` files both ways and there is no note at all; `os/user` behaves the same way (`cgo_lookup_unix.go` is built with `cgo || darwin`, so it stays).
 
 Add `--format json` for machine-readable output, with the files compiled only with cgo and only without it for each finding.
 

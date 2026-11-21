@@ -77,9 +77,9 @@ func main() {
 // TestStandardLibraryDarwin checks that darwin gets its own explanation, not
 // the Linux one: darwin links the cgo resolver into every build, so the note
 // must not claim that name lookups fall back to /etc/resolv.conf. Whether net
-// changes at all on darwin without cgo depends on the Go version (1.22 leaves
-// cgo_unix_cgo_darwin.go out, current releases build the same files both
-// ways), so the note is only checked when there is one.
+// changes at all on darwin without cgo depends on the Go version: 1.22 has
+// cgo_unix_cgo_darwin.go, built with "!netgo && cgo && darwin", and 1.23
+// removed that file, so later releases build the same net files both ways.
 func TestStandardLibraryDarwin(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
@@ -102,13 +102,13 @@ func main() {
 	if res.code != 0 {
 		t.Fatalf("exit %d\n%s%s", res.code, res.stdout, res.stderr)
 	}
-	notes := readJSON(t, res.stdout).Targets[0].Standard
-	// Go 1.22 leaves cgo_unix_cgo_darwin.go out of net without cgo and so has a
-	// net note; Go 1.23 and later compile the same net files both ways. Assert
-	// on the net note only where the toolchain produces one, so this test can
-	// never pass by looking at an empty list. The darwin text itself is
-	// covered by TestStdExplainDarwin, which runs on any toolchain.
-	if goVersionMinor(t) <= 22 {
+	notes := firstTarget(t, res.stdout).Standard
+	// The darwin text itself is covered by TestStdExplainDarwin, which runs on
+	// any toolchain. Here the note is checked only where the toolchain produces
+	// one, so this test can never pass by looking at an empty list.
+	if minor := goVersionMinor(t); minor < 0 {
+		t.Logf("the go on PATH isn't a version this test can parse, so the net note can't be expected")
+	} else if minor <= 22 {
 		var network *struct{ Severity, Code, Package, Message string }
 		for i := range notes {
 			if notes[i].Package == "net" {
@@ -121,6 +121,11 @@ func main() {
 		if !strings.Contains(network.Message, "resolver") {
 			t.Errorf("net: darwin note doesn't say what happens to the resolver: %q", network.Message)
 		}
+		if !strings.Contains(network.Message, "cgo_unix_cgo_darwin.go") {
+			t.Errorf("net: darwin note doesn't name the file that changed: %q", network.Message)
+		}
+	} else {
+		t.Skipf("Go 1.%d compiles the same net files on darwin with and without cgo, so there is no note to check here", minor)
 	}
 	for _, f := range notes {
 		if strings.Contains(f.Message, "/etc/resolv.conf") || strings.Contains(f.Message, "/etc/passwd") {
@@ -156,14 +161,57 @@ func main() {
 `,
 	})
 	plain := run(t, dir, nil, "--target", "linux/amd64", "--std", "--format", "json", ".")
-	if len(readJSON(t, plain.stdout).Targets[0].Standard) == 0 {
+	if plain.code != 0 || plain.stderr != "" {
+		t.Fatalf("exit %d, stderr %q\n%s", plain.code, plain.stderr, plain.stdout)
+	}
+	if firstTarget(t, plain.stdout).Standard == nil {
 		t.Fatalf("without tags the standard library notes should be there:\n%s", plain.stdout)
 	}
 	tagged := run(t, dir, nil, "--target", "linux/amd64", "--std", "--tags", "netgo,osusergo", "--format", "json", ".")
 	if tagged.code != 0 || tagged.stderr != "" {
 		t.Fatalf("exit %d, stderr %q\n%s", tagged.code, tagged.stderr, tagged.stdout)
 	}
-	if got := readJSON(t, tagged.stdout).Targets[0].Standard; len(got) != 0 {
+	if got := firstTarget(t, tagged.stdout).Standard; len(got) != 0 {
 		t.Errorf("-tags netgo,osusergo still reports standard library changes: %+v", got)
 	}
+}
+
+// TestGoVersionMinor checks the lenient parsing the darwin test gates on: a
+// release candidate and a development build must give their version, not -1,
+// so a toolchain that reports one of those isn't taken for Go 1.22.
+func TestGoVersionMinor(t *testing.T) {
+	cases := map[string]int{
+		"go1.22":              22,
+		"go1.22.12":           22,
+		"go1.23rc1":           23,
+		"go1.24.0":            24,
+		"devel go1.25-abcdef": 25,
+		"devel +1234abcdef":   -1, // no version at all
+		"gccgo":               -1,
+		"don't know":          -1,
+	}
+	for v, want := range cases {
+		got, ok := parseGoVersionMinor(v)
+		if want == -1 {
+			if ok {
+				t.Errorf("%q: read as %d, want no version", v, got)
+			}
+			continue
+		}
+		if !ok || got != want {
+			t.Errorf("%q: got %d (%v), want %d", v, got, ok, want)
+		}
+	}
+}
+
+// firstTarget parses a JSON report and returns its one target, failing the
+// test when the report doesn't have exactly one, so a run that checked
+// nothing can't be read as a quiet one.
+func firstTarget(t *testing.T, out string) jsonTarget {
+	t.Helper()
+	r := readJSON(t, out)
+	if len(r.Targets) != 1 {
+		t.Fatalf("got %d targets, want 1:\n%s", len(r.Targets), out)
+	}
+	return r.Targets[0]
 }

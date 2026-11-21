@@ -4,6 +4,9 @@ All notable changes are documented here, in [Keep a Changelog](https://keepachan
 
 ## [Unreleased]
 
+### Changed
+- The darwin standard library note names the file that is compiled differently, and the `ios` note says `ios` instead of `darwin`. The darwin test reads a release-candidate or development Go version as the release it is closest to, and skips its version-gated check when there is no version to read, instead of taking it for Go 1.22.
+
 ### Added
 - The `net` and `os/user` notes say that `-tags netgo` / `-tags osusergo` make the cgo build use the pure Go code too, and darwin gets its own explanation instead of the Linux one: there both builds keep the cgo resolver, so only the compiled files differ.
 

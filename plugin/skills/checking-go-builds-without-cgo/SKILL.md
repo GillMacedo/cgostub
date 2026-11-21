@@ -34,7 +34,7 @@ Add `--std` to list the standard library packages that change, `--format json` f
 - **ERROR `needs-cgo`:** the package doesn't build without cgo. The message quotes `go build` or says build constraints exclude all its files.
 - **WARN `fallback`:** a different implementation is compiled in. It may behave the same (a pure Go version of the same algorithm) or not. Read both files and say which.
 - **WARN `cgo-dropped`:** cgo files are left out with nothing in their place. If the message names an `init` function, whatever it registered (a `database/sql` driver, an image format, a codec) is missing at run time.
-- **note `standard-library`** (with `--std`): `net` always uses the pure Go DNS resolver and `os/user` reads only `/etc/passwd` and `/etc/group` on Linux and similar systems. These matter when the service relies on NSS sources such as LDAP or SSSD. With `-tags netgo` / `-tags osusergo` both builds use the pure Go code, so the notes go away. On darwin both builds keep the cgo resolver, so the note there only says which file is compiled differently.
+- **note `standard-library`** (with `--std`): `net` always uses the pure Go DNS resolver and `os/user` reads only `/etc/passwd` and `/etc/group` on Linux and similar systems. These matter when the service relies on NSS sources such as LDAP or SSSD. With `-tags netgo` / `-tags osusergo` both builds use the pure Go code, so the notes go away. On darwin both builds keep the cgo resolver, so the note there names the file that is compiled differently instead. Up to Go 1.22 that is `net/cgo_unix_cgo_darwin.go`; Go 1.23 removed it, so on 1.23 and later there is no `net` note on darwin at all.
 
 ## Report
 

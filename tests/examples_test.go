@@ -12,20 +12,23 @@ import (
 type jsonReport struct {
 	Errors   int
 	Warnings int
-	Targets  []struct {
-		Target          string
-		Packages        int
-		NonStandard     int `json:"packagesOutsideStandardLibrary"`
-		BuiltWithCgo    bool
-		BuiltWithoutCgo bool
-		Findings        []struct {
-			Severity, Code, Package, Message, Evidence string
-			Via                                        []string
-			Removed                                    []string `json:"filesOnlyWithCgo"`
-			Added                                      []string `json:"filesOnlyWithoutCgo"`
-		}
-		Standard []struct{ Severity, Code, Package, Message string } `json:"standardLibrary"`
+	Targets  []jsonTarget
+}
+
+// jsonTarget is one target's part of the report.
+type jsonTarget struct {
+	Target          string
+	Packages        int
+	NonStandard     int `json:"packagesOutsideStandardLibrary"`
+	BuiltWithCgo    bool
+	BuiltWithoutCgo bool
+	Findings        []struct {
+		Severity, Code, Package, Message, Evidence string
+		Via                                        []string
+		Removed                                    []string `json:"filesOnlyWithCgo"`
+		Added                                      []string `json:"filesOnlyWithoutCgo"`
 	}
+	Standard []struct{ Severity, Code, Package, Message string } `json:"standardLibrary"`
 }
 
 func readJSON(t *testing.T, out string) jsonReport {
